@@ -12,13 +12,12 @@ const client = new MongoClient(footballuri, {
     }
 });
 
-client.connect();
-console.log("Connected");
+client.connect().then((val) => {console.log("Connected")});
 
 //add a single team 1.5
 async function addTeam(client, teamData) {
     const result = await client.db("footballdb").collection("football").insertOne(teamData);
-    console.log(`Inserted result for id: ${result.insertedId}`)
+    return `Inserted result for id: ${result.insertedId}`;
 };
 
 //updates a single team record 1.6
@@ -31,40 +30,42 @@ async function updateTeam(client, teamName,updateData) {
 
 //returns data based on year 1.7
 async function getAllDataByYear(client, year) {
-    const cursor = await client.db("footballdb").collection("football").find({
-        Year: year
-    }).project({GamesPlayed: 1, Win: 1, Draw: 1, _id: 0});
+    const cursor = await client.db("footballdb").collection("football").find({Year: parseInt(year)})
+    .project({GamesPlayed: 1, Win: 1, Draw: 1, _id: 0})
+    .toArray();
 
-    const result = await cursor.toArray();
-    return result;
+    return cursor;
 };
 
 //deletes a single data 1.8
 async function deleteTeam(client, teamName) {
     const result = await client.db("footballdb").collection("football").deleteOne({Team: teamName});
 
-    console.log(`${result.deletecCount} number of document(s) was/were deleted`)
+    return `${result.deletecCount} number of document(s) was/were deleted`;
 };
 
 //access the top 10 teams who have more wins than a specified number of wins 1.9
 async function getDataByWin(client, wins) {
     const cursor = await client.db("footballdb").collection("football").find({
-        Win: wins
+        Win: parseInt(wins)
     }).sort({Win: -1})
-    .limit(10);
-
-    const result = await cursor.toArray();
-    return result;
+    .limit(10).toArray();
+    return cursor;
 };
 
 //returns all teams by grouping them using average goal for for a specific given year 2.0
 async function getAllDataByYearOnGoalsFor(client, year) {
     const average = await client.db("footballdb").collection("football").aggregate([
-        { $project: {averageGoalsFor: { $avg: "$GoalsFor"} } }]).toArray()[0]["averaeGoalsFor"];
+        { $project: {averageGoalsFor: { $avg: `$GoalsFor`} } }]).toArray();
+
+    const avge = [];
+    average.forEach((element) => avge.push(element.averageGoalsFor));
+    const avg = avge.reduce((a, b) => a + b , 0) / avge.length;
+
 
     const result = await client.db("footballdb").collection("football").find(
-        {Year: year,
-        GoalsFor: {$gte: average}}
+        {Year: parseInt(year),
+        GoalsFor: {$gte: parseInt(avg)}}
     ).toArray();
 
     return result;
@@ -97,21 +98,21 @@ router.post("/api_v1/delete_team/:team", async function(req, res) {
 
 //get data by given year
 router.get('/api_v1/get_teams/:year', async function(req, res) {
-    const year = new Number(req.params.year);
+    const year = req.params.year;
     const result = await getAllDataByYear(client, year);
     return res.json({result})
 });
 
 //gets data by win
 router.get('/api_v1/get_teams_win/:win', async function(req, res) {
-    const win = new Number(req.params.win);
+    const win = req.params.win;
     const result = await getDataByWin(client, win);
     return res.json({result})
 });
 
 //get data by goals for
 router.get('/api_v1/get_teams_goals_for/:year', async function(req, res) {
-    const year = new Number(req.params.year);
+    const year = req.params.year;
     const result = await getAllDataByYearOnGoalsFor(client, year);
     return res.json({result})
 });
